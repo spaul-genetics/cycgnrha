@@ -1,0 +1,265 @@
+---
+title: "About"
+---
+
+```{r setup, message=F, echo=F, error=F, warning=F}
+knitr::opts_chunk$set(echo = T, message = F, warning = F, cache = T, fig.align = 'center', fig.width = 10, fig.height = 10)
+library(tidyverse, quietly = T)
+library(ggalluvial, quietly = T)
+library(kableExtra, quietly = T)
+library(gtsummary, quietly = T)
+library(finalfit, quietly = T)
+```
+
+
+```{r message=FALSE, warning=F}
+setwd('~/Documents/NIAMS-27/')
+group1 = readxl::read_excel('./data/Group1_Cleaned.xlsx', skip = 3)%>%
+  set_tidy_names(., syntactic = T)%>%
+  setNames(gsub('X\\.\\.|X\\.\\.\\.|X\\.\\.\\.\\.','',names(.)))%>%
+  setNames(gsub('\\.\\.', '\\.', names(.)))%>%
+  setNames(tolower(names(.)))%>%
+  setNames(sub('[.]$','',names(.)))%>%
+  dplyr::rename(length.of.menses.per.month.after = length.of.menses.per.month.after.cyc.treatment,
+                regularity.of.menses.after = regularity.of.menses.after.cyc.treatment,
+                times.pregnant.after = times.pregnant.after.cyc.treatment,
+                live.births.after = live.births.after.cyc.treatment,
+                miscarriages.and.or.abortions.after = miscarriages.and.or.abortions.after.cyc.treatment,
+                symptoms.of.menopause.after = symptoms.of.menopause.after.cyc.treatment,
+                diagnosed.with.menopause.after = diagnosed.with.menopause.after.treatment.with.cyc,
+                difficulty.conceiving.a.child.after = difficulty.conceiving.a.child.after.cyc.treatment
+                )
+
+group2 = readxl::read_excel('./data/Group2_Cleaned.xlsx', skip = 3)%>%
+  set_tidy_names(syntactic = T)%>%
+  setNames(gsub('X\\.\\.|X\\.\\.\\.|X\\.\\.\\.\\.','',names(.)))%>%
+  setNames(gsub('\\.\\.', '\\.', names(.)))%>%
+  setNames(tolower(names(.)))%>%
+  setNames(sub('[.]$','',names(.)))%>%
+  dplyr::rename(length.of.menses.per.month.after = length.of.menses.per.month.after.cyc.treatment,
+                regularity.of.menses.after = regularity.of.menses.after.cyc.treatment,
+                times.pregnant.after = times.pregnant.after.cyc.treatment,
+                live.births.after = live.births.after.cyc.treatment,
+                miscarriages.and.or.abortions.after = miscarriages.and.or.abortions.after.cyc.treatment,
+                symptoms.of.menopause.after = symptoms.of.menopause.after.cyc.treatment,
+                diagnosed.with.menopause.after = diagnosed.with.menopause.after.treatment.with.cyc,
+                difficulty.conceiving.a.child.after = difficulty.conceiving.a.child.after.cyc.treatment
+                )
+
+group3 = readxl::read_excel('./data/Group3_Cleaned.xlsx', skip = 3)%>%
+  set_tidy_names(., syntactic = T)%>%
+  setNames(gsub('X\\.\\.|X\\.\\.\\.|X\\.\\.\\.\\.','',names(.)))%>%
+  setNames(gsub('\\.\\.', '\\.', names(.)))%>%
+  setNames(tolower(names(.)))%>%
+  setNames(sub('[.]$','',names(.)))%>%
+  dplyr::rename(length.of.menses.per.month.after = length.of.menses.per.month.after.sle.diagnosis,
+                regularity.of.menses.after = regularity.of.menses.after.sle.diagnosis, 
+                symptoms.of.menopause.after = which.menopausal.symptoms.did.you.experience,
+                times.pregnant.after = times.times.pregnant.after.sle.diagnosis,
+                live.births.after = live.births.after.sle.diagnosis,
+                miscarriages.and.or.abortions.after = miscarriages.and.or.abortions.after.sle.diagnosis,
+                difficulty.conceiving.a.child.after = difficulty.conceiving.a.child.after.being.diagnosed.for.sle
+                )
+
+missing_count = group1%>%
+  is.na()%>%
+  colSums()%>%
+  data.frame()%>%
+  setNames('Group1')%>%
+  tibble::rownames_to_column('Question')%>%
+  dplyr::arrange(Group1)%>%
+  left_join(
+    group2%>%is.na()%>%colSums()%>%data.frame()%>%setNames('Group2')%>%tibble::rownames_to_column('Question'), by = 'Question'
+  )
+
+kept.questions = missing_count$Question[missing_count$Group1<12]
+kept.questions = setdiff(kept.questions, 
+                         c('used.art.to.get.pregnant.after.cyc.treatment'))
+group1 = group1%>%dplyr::select(all_of(kept.questions))%>%dplyr::mutate(Group = 'Group1')
+group2 = group2%>%dplyr::select(all_of(kept.questions))%>%dplyr::mutate(Group = 'Group2')
+group3 = group3%>%dplyr::mutate(diagnosed.with.menopause.after = NA)%>%dplyr::select(all_of(kept.questions))%>%dplyr::mutate(Group = 'Group3')
+cases = rbind(group1, group2)
+all = rbind(cases, group3)
+all = all%>%dplyr::filter(!is.na(patient))
+all <- all%>%filter(clinically.diagnosed.with.poi.prior.to.sle.diagnosis!='Yes' | is.na(clinically.diagnosed.with.poi.prior.to.sle.diagnosis))
+all <- all%>%filter(patient!='CYC072')
+```
+
+
+
+# Data Overview
+
+* One person on group3 was clinically diagnosed with POI prior to SLE diagnosis. I am removing that patient from analysis. Patient number is CYC055.
+
+```{r}
+
+```
+
+* Patient CYC072 did not answer most of the questions. Discarding this patient.
+
+```{r}
+
+```
+
+* Two patients reported “Irregular, IUD in place” and “On birth control” on length of menses per month after treatment. For now, I am treating these as missing. 
+
+::: {.panel-tabset}
+
+## Questions and Missingness
+
+```{r}
+missing_count%>%
+  kbl()%>%
+  kable_styling(bootstrap_options = c('hover', 'stripped'))
+
+```
+
+Variables with missing data 12 or more are discarded. List of these variables are : `r missing_count$Question[missing_count$Group1>=12]`
+
+## Descriptive (Part1)
+
+
+```{r}
+all%>%dplyr::select(where(is.numeric), Group)%>%tbl_summary(., by = 'Group', type = c('age.of.first.menses') ~ 'continuous', statistic = all_continuous() ~ "{mean} ({sd})")
+```
+
+
+## Descriptive (Part2)
+
+
+```{r}
+all%>%dplyr::select(!where(is.numeric), Group, -patient)%>%tbl_summary(., by = 'Group', statistic = all_continuous() ~ "{mean} ({sd})")
+```
+
+Some questions ask conditions after treatment, for example, times pregnant after CYC treatment. I removed the trailing part after "after" to make it consistant on three group of data. So, times.pregnant.after means times pregnant after CYC treatment for Group1, after CYC and GnRh for Group 2 and after SLE diagnosis for Group3. 
+
+
+:::
+
+
+# Comparison Prior Treatment
+
+::: {.panel-tabset}
+
+## Age of first menses
+
+No significant difference in age of first menses was found between groups. 
+
+```{r}
+all%>%select(Group, age.of.first.menses)%>%ggplot() + aes(x = Group, y = age.of.first.menses)+geom_boxplot()+theme_classic()+labs(x = '', y = 'Age of First Menses')
+```
+
+
+## Length of Meanses Prior
+
+There are three data points one on each group with unually high length. One of the patient (on group2) confirmed that she had one mense of length 30 days prior SLE diagnosis. For the rest of the analysis I am considering the data points as missing. Need to double check with the patients on this account, specially if the high length that they reported was just occured once or usually. 
+
+```{r}
+p_length_prior = ggplot(data = all, aes(x = Group, y = length.of.menses.per.month.prior.to.sle.diagnosis))+geom_boxplot()+theme_classic()+labs(x = '', y = 'Length of Menses Prior SLE')+ggthemes::scale_fill_tableau()
+p_length_prior
+
+```
+```{r}
+all$length.of.menses.per.month.prior.to.sle.diagnosis[all$length.of.menses.per.month.prior.to.sle.diagnosis>=20]<-NA
+```
+
+## Pregnancy prior SLE
+
+```{r}
+p1 = ggplot(data = all, aes(x = times.pregnant.prior.to.sle.diagnosis, fill = Group, y = ..prop..))+geom_bar(position = position_dodge())+theme_classic()+labs(y = 'Proportion', x = 'Pregnancy prior SLE')+theme(legend.position = 'top')+ggthemes::scale_fill_tableau()
+p2 = ggplot(data = all, aes(x = Group, y = times.pregnant.prior.to.sle.diagnosis, fill = Group))+geom_boxplot()+theme_classic()+labs(x = '', y = 'Pregnancy prior SLE')+ggthemes::scale_fill_tableau()
+ggpubr::ggarrange(p1, p2, common.legend = T)
+```
+
+
+## Miscarriages and/or Abortion Prior SLE
+
+```{r}
+p1 = ggplot(data = all, aes(x = miscarriages.and.or.abortions.prior.to.sle.diagnosis, fill = Group, y = ..prop..))+geom_bar(position = position_dodge())+theme_classic()+labs(y = 'Proportion', x = 'Miscarriages/Abortions prior SLE')+theme(legend.position = 'top')+ggthemes::scale_fill_tableau()
+p2 = ggplot(data = all, aes(x = Group, y = miscarriages.and.or.abortions.prior.to.sle.diagnosis, fill = Group))+geom_boxplot()+theme_classic()+labs(x = '', y = 'Miscarriages/Abortions prior SLE')+ggthemes::scale_fill_tableau()
+ggpubr::ggarrange(p1, p2, common.legend = T)
+```
+
+## Live Birth Prior SLE
+
+```{r}
+p1 = ggplot(data = all, aes(x = live.births.prior.to.sle.diagnosis, fill = Group, y = ..prop..))+geom_bar(position = position_dodge())+theme_classic()+labs(y = 'Proportion', x = 'Pregnancy prior SLE')+theme(legend.position = 'top')+ggthemes::scale_fill_tableau()
+p2 = ggplot(data = all, aes(x = Group, y = live.births.prior.to.sle.diagnosis, fill = Group))+geom_boxplot()+theme_classic()+labs(x = '', y = 'Pregnancy prior SLE')+ggthemes::scale_fill_tableau()
+ggpubr::ggarrange(p1, p2, common.legend = T)
+```
+
+
+## Regularity of Menses Prior SLE
+
+```{r}
+ggplot(all, aes(x = regularity.of.menses.prior.to.sle.diagnosis, fill = Group, y = ..prop.., group = Group))+geom_bar(position = position_dodge(), stat = 'count')+theme_classic()+theme(axis.text.x = element_text(angle = 45))+labs(x = 'Regularity of Menses Prior SLE', y = 'Proportion')+ggthemes::scale_fill_tableau()
+```
+
+## Difficulty Conceiving Prior SLE
+
+```{r}
+ggplot(data = all, aes(x = difficulty.conceiving.a.child.prior.to.being.diagnosed.for.sle, y = ..prop.., fill = Group, group = Group))+geom_bar(position = position_dodge(), stat = 'count')+theme_classic()+labs(x = 'Difficulty Conceiving Prior SLE', y = 'Proportion')+ggthemes::scale_fill_tableau()
+```
+
+:::
+
+
+# Comparison Post Treatment
+
+::: {.panel-tabset}
+
+## Length of Menses
+
+```{r}
+ggplot(data = all, aes(x = Group, y = length.of.menses.per.month.after))+geom_boxplot()+theme_classic()+labs(x = '', y = 'Length of Menses Post Treatment')+ggthemes::scale_fill_tableau()
+```
+
+## Pregnancy 
+
+```{r}
+p1 = ggplot(data = all, aes(x = times.pregnant.after, fill = Group, y = ..prop..))+geom_bar(position = position_dodge())+theme_classic()+labs(y = 'Proportion', x = 'Pregnancy Post Treatment')+theme(legend.position = 'top')+ggthemes::scale_fill_tableau()
+p2 = ggplot(data = all, aes(x = Group, y = times.pregnant.after, fill = Group))+geom_boxplot()+theme_classic()+labs(x = '', y = 'Pregnancy Post Treatment')+ggthemes::scale_fill_tableau()
+ggpubr::ggarrange(p1, p2, common.legend = T)
+```
+
+
+## Live birth
+
+```{r}
+p1 = ggplot(data = all, aes(x = live.births.after, fill = Group, y = ..prop..))+geom_bar(position = position_dodge())+theme_classic()+labs(y = 'Proportion', x = 'Live Births Post Treatment')+theme(legend.position = 'top')+ggthemes::scale_fill_tableau()
+p2 = ggplot(data = all, aes(x = Group, y = live.births.after, fill = Group))+geom_boxplot()+theme_classic()+labs(x = '', y = 'Live Births Post Treatment')+ggthemes::scale_fill_tableau()
+ggpubr::ggarrange(p1, p2, common.legend = T)
+```
+
+## Miscarriages/Abortions
+
+```{r}
+p1 = ggplot(data = all, aes(x = miscarriages.and.or.abortions.after, fill = Group, y = ..prop..))+geom_bar(position = position_dodge())+theme_classic()+labs(y = 'Proportion', x = 'Miscarriage/Abortion Post Treatment')+theme(legend.position = 'top')+ggthemes::scale_fill_tableau()
+p2 = ggplot(data = all, aes(x = Group, y = miscarriages.and.or.abortions.after, fill = Group))+geom_boxplot()+theme_classic()+labs(x = '', y = 'Miscarriage/Abortion Post Treatment')+ggthemes::scale_fill_tableau()
+ggpubr::ggarrange(p1, p2, common.legend = T)
+```
+
+
+## Regularity of Menses
+
+```{r}
+
+ggplot(all, aes(x = regularity.of.menses.after, fill = Group, y = ..prop.., group = Group))+geom_bar(position = position_dodge(), stat = 'count')+theme_classic()+theme(axis.text.x = element_text(angle = 45))+labs(x = 'Regularity of Menses Post Treatment', y = 'Proportion')+ggthemes::scale_fill_tableau()
+```
+
+
+## Regularity of Menses (Poly+Oligo)
+
+```{r}
+all%>%dplyr::mutate(regularity.of.menses.after.polyoligo = dplyr::recode(regularity.of.menses.after, 'Oligomenorrhea' = "Irregular", 'Polymenorrhea' = 'Irregular'))%>%
+ggplot()+ aes(x = regularity.of.menses.after.polyoligo, fill = Group, y = ..prop.., group = Group)+geom_bar(position = position_dodge(), stat = 'count')+theme_classic()+theme(axis.text.x = element_text(angle = 45))+labs(x = 'Regularity of Menses Post Treatment', y = 'Proportion')+ggthemes::scale_fill_tableau()
+```
+
+
+## Difficulty conceiving 
+
+```{r}
+ggplot(all, aes(x = difficulty.conceiving.a.child.after, fill = Group, y = ..prop.., group = Group))+geom_bar(position = position_dodge(), stat = 'count')+theme_classic()+theme(axis.text.x = element_text(angle = 45))+labs(x = 'Difficulty Conceiving Post Treatment', y = 'Proportion')+ggthemes::scale_fill_tableau()
+```
+
+:::

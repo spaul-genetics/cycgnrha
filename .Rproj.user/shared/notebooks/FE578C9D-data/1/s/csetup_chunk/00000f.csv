@@ -1,0 +1,6 @@
+"0","knitr::opts_chunk$set(echo = T, message = F, warning = F, cache = T, fig.align = 'center', fig.width = 10, fig.height = 10)"
+"0","library(tidyverse, quietly = T)"
+"0","library(ggalluvial, quietly = T)"
+"0","library(kableExtra, quietly = T)"
+"0","library(gtsummary, quietly = T)"
+"0","library(finalfit, quietly = T)"

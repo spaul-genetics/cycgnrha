@@ -1,0 +1,23 @@
+project:
+  type: website
+  output-dir: docs
+
+website:
+  title: "Efficacy of GnRHa in ovarian preservation"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Home
+      - href: data.qmd
+        text: Data
+    
+
+format:
+  html:
+    theme: cosmo
+    css: styles.css
+    toc: true
+    code-fold: true
+
+
+

@@ -1,0 +1,1064 @@
+---
+title: "NIAMS-27"
+subtitle: "GnRha Cohort Analysis"
+author: 
+  - Subrata Paul
+title-block-banner: "#27445C"
+format:
+  html:
+    toc: true
+    toc-location: left
+    page-layout: full
+    theme: 
+      light: cosmo
+      dark: darkly
+    html-math-method: katex
+    code-fold: true
+    highlight-style: tango
+    toc_float: true
+    number-sections: false
+    embed-resources: true
+    smooth-scroll: true
+    fig-align: 'center'
+    fig-width: 10
+    fig-height: 10
+  pdf:
+    toc: true
+    fig-pos: H
+    toc-depth: 4
+css: style.css
+editor: source
+execute: 
+  cache: true
+  echo: true
+---
+
+
+```{r setup, message=F, echo=F, error=F, warning=F}
+knitr::opts_chunk$set(echo = T, message = F, warning = F, cache = T, fig.align = 'center', fig.width = 10, fig.height = 10)
+library(tidyverse, quietly = T)
+library(ggalluvial, quietly = T)
+library(kableExtra, quietly = T)
+library(gtsummary, quietly = T)
+library(finalfit, quietly = T)
+```
+
+
+```{r message=FALSE, warning=F}
+group1 = readxl::read_excel('./data/Group1_Cleaned.xlsx', skip = 3)%>%
+  set_tidy_names(., syntactic = T)%>%
+  setNames(gsub('X\\.\\.|X\\.\\.\\.|X\\.\\.\\.\\.','',names(.)))%>%
+  setNames(gsub('\\.\\.', '\\.', names(.)))%>%
+  setNames(tolower(names(.)))%>%
+  setNames(sub('[.]$','',names(.)))%>%
+  dplyr::rename(length.of.menses.per.month.after = length.of.menses.per.month.after.cyc.treatment,
+                regularity.of.menses.after = regularity.of.menses.after.cyc.treatment,
+                times.pregnant.after = times.pregnant.after.cyc.treatment,
+                live.births.after = live.births.after.cyc.treatment,
+                miscarriages.and.or.abortions.after = miscarriages.and.or.abortions.after.cyc.treatment,
+                symptoms.of.menopause.after = symptoms.of.menopause.after.cyc.treatment,
+                diagnosed.with.menopause.after = diagnosed.with.menopause.after.treatment.with.cyc,
+                difficulty.conceiving.a.child.after = difficulty.conceiving.a.child.after.cyc.treatment
+                )
+
+group2 = readxl::read_excel('./data/Group2_Cleaned.xlsx', skip = 3)%>%
+  set_tidy_names(syntactic = T)%>%
+  setNames(gsub('X\\.\\.|X\\.\\.\\.|X\\.\\.\\.\\.','',names(.)))%>%
+  setNames(gsub('\\.\\.', '\\.', names(.)))%>%
+  setNames(tolower(names(.)))%>%
+  setNames(sub('[.]$','',names(.)))%>%
+  dplyr::rename(length.of.menses.per.month.after = length.of.menses.per.month.after.cyc.treatment,
+                regularity.of.menses.after = regularity.of.menses.after.cyc.treatment,
+                times.pregnant.after = times.pregnant.after.cyc.treatment,
+                live.births.after = live.births.after.cyc.treatment,
+                miscarriages.and.or.abortions.after = miscarriages.and.or.abortions.after.cyc.treatment,
+                symptoms.of.menopause.after = symptoms.of.menopause.after.cyc.treatment,
+                diagnosed.with.menopause.after = diagnosed.with.menopause.after.treatment.with.cyc,
+                difficulty.conceiving.a.child.after = difficulty.conceiving.a.child.after.cyc.treatment
+                )
+
+group3 = readxl::read_excel('./data/Group3_Cleaned.xlsx', skip = 3)%>%
+  set_tidy_names(., syntactic = T)%>%
+  setNames(gsub('X\\.\\.|X\\.\\.\\.|X\\.\\.\\.\\.','',names(.)))%>%
+  setNames(gsub('\\.\\.', '\\.', names(.)))%>%
+  setNames(tolower(names(.)))%>%
+  setNames(sub('[.]$','',names(.)))%>%
+  dplyr::rename(length.of.menses.per.month.after = length.of.menses.per.month.after.sle.diagnosis,
+                regularity.of.menses.after = regularity.of.menses.after.sle.diagnosis, 
+                symptoms.of.menopause.after = which.menopausal.symptoms.did.you.experience,
+                times.pregnant.after = times.times.pregnant.after.sle.diagnosis,
+                live.births.after = live.births.after.sle.diagnosis,
+                miscarriages.and.or.abortions.after = miscarriages.and.or.abortions.after.sle.diagnosis,
+                difficulty.conceiving.a.child.after = difficulty.conceiving.a.child.after.being.diagnosed.for.sle
+                )
+
+missing_count = group1%>%
+  is.na()%>%
+  colSums()%>%
+  data.frame()%>%
+  setNames('Group1')%>%
+  tibble::rownames_to_column('Question')%>%
+  dplyr::arrange(Group1)%>%
+  left_join(
+    group2%>%is.na()%>%colSums()%>%data.frame()%>%setNames('Group2')%>%tibble::rownames_to_column('Question'), by = 'Question'
+  )
+
+kept.questions = missing_count$Question[missing_count$Group1<12]
+kept.questions = setdiff(kept.questions, 
+                         c('used.art.to.get.pregnant.after.cyc.treatment'))
+group1 = group1%>%dplyr::select(all_of(kept.questions))%>%dplyr::mutate(Group = 'Group1')
+group2 = group2%>%dplyr::select(all_of(kept.questions))%>%dplyr::mutate(Group = 'Group2')
+group3 = group3%>%dplyr::mutate(diagnosed.with.menopause.after = NA)%>%dplyr::select(all_of(kept.questions))%>%dplyr::mutate(Group = 'Group3')
+cases = rbind(group1, group2)
+all = rbind(cases, group3)
+all = all%>%dplyr::filter(!is.na(patient))
+
+```
+
+# Data Overview
+
+* One person on group3 was clinically diagnosed with POI prior to SLE diagnosis. I am removing that patient from analysis. Patient number is CYC055.
+
+```{r}
+all <- all%>%filter(clinically.diagnosed.with.poi.prior.to.sle.diagnosis!='Yes' | is.na(clinically.diagnosed.with.poi.prior.to.sle.diagnosis))
+```
+
+* Patient CYC072 did not answer most of the questions. Discarding this patient.
+
+```{r}
+all <- all%>%filter(patient!='CYC072')
+```
+
+* Two patients reported “Irregular, IUD in place” and “On birth control” on length of menses per month after treatment. For now, I am treating these as missing. 
+
+::: {.panel-tabset}
+
+## Questions and Missingness
+
+```{r}
+missing_count%>%
+  kbl()%>%
+  kable_styling(bootstrap_options = c('hover', 'stripped'))
+
+```
+
+Variables with missing data 12 or more are discarded. List of these variables are : `r missing_count$Question[missing_count$Group1>=12]`
+
+## Descriptive (Part1)
+
+
+```{r}
+all%>%dplyr::select(where(is.numeric), Group)%>%tbl_summary(., by = 'Group', type = c('age.of.first.menses') ~ 'continuous', statistic = all_continuous() ~ "{mean} ({sd})")
+```
+
+
+## Descriptive (Part2)
+
+
+```{r}
+all%>%dplyr::select(!where(is.numeric), Group, -patient)%>%tbl_summary(., by = 'Group', statistic = all_continuous() ~ "{mean} ({sd})")
+```
+
+Some questions ask conditions after treatment, for example, times pregnant after CYC treatment. I removed the trailing part after "after" to make it consistant on three group of data. So, times.pregnant.after means times pregnant after CYC treatment for Group1, after CYC and GnRh for Group 2 and after SLE diagnosis for Group3. 
+
+
+:::
+
+
+# Comparison Prior Treatment
+
+::: {.panel-tabset}
+
+## Age of first menses
+
+No significant difference in age of first menses was found between groups. 
+
+```{r}
+all%>%select(Group, age.of.first.menses)%>%ggplot() + aes(x = Group, y = age.of.first.menses)+geom_boxplot()+theme_classic()+labs(x = '', y = 'Age of First Menses')
+```
+
+
+## Length of Meanses Prior
+
+There are three data points one on each group with unually high length. One of the patient (on group2) confirmed that she had one mense of length 30 days prior SLE diagnosis. For the rest of the analysis I am considering the data points as missing. Need to double check with the patients on this account, specially if the high length that they reported was just occured once or usually. 
+
+```{r}
+p_length_prior = ggplot(data = all, aes(x = Group, y = length.of.menses.per.month.prior.to.sle.diagnosis))+geom_boxplot()+theme_classic()+labs(x = '', y = 'Length of Menses Prior SLE')+ggthemes::scale_fill_tableau()
+p_length_prior
+
+```
+```{r}
+all$length.of.menses.per.month.prior.to.sle.diagnosis[all$length.of.menses.per.month.prior.to.sle.diagnosis>=20]<-NA
+```
+
+## Pregnancy prior SLE
+
+```{r}
+p1 = ggplot(data = all, aes(x = times.pregnant.prior.to.sle.diagnosis, fill = Group, y = ..prop..))+geom_bar(position = position_dodge())+theme_classic()+labs(y = 'Proportion', x = 'Pregnancy prior SLE')+theme(legend.position = 'top')+ggthemes::scale_fill_tableau()
+p2 = ggplot(data = all, aes(x = Group, y = times.pregnant.prior.to.sle.diagnosis, fill = Group))+geom_boxplot()+theme_classic()+labs(x = '', y = 'Pregnancy prior SLE')+ggthemes::scale_fill_tableau()
+ggpubr::ggarrange(p1, p2, common.legend = T)
+```
+
+
+## Miscarriages and/or Abortion Prior SLE
+
+```{r}
+p1 = ggplot(data = all, aes(x = miscarriages.and.or.abortions.prior.to.sle.diagnosis, fill = Group, y = ..prop..))+geom_bar(position = position_dodge())+theme_classic()+labs(y = 'Proportion', x = 'Miscarriages/Abortions prior SLE')+theme(legend.position = 'top')+ggthemes::scale_fill_tableau()
+p2 = ggplot(data = all, aes(x = Group, y = miscarriages.and.or.abortions.prior.to.sle.diagnosis, fill = Group))+geom_boxplot()+theme_classic()+labs(x = '', y = 'Miscarriages/Abortions prior SLE')+ggthemes::scale_fill_tableau()
+ggpubr::ggarrange(p1, p2, common.legend = T)
+```
+
+## Live Birth Prior SLE
+
+```{r}
+p1 = ggplot(data = all, aes(x = live.births.prior.to.sle.diagnosis, fill = Group, y = ..prop..))+geom_bar(position = position_dodge())+theme_classic()+labs(y = 'Proportion', x = 'Pregnancy prior SLE')+theme(legend.position = 'top')+ggthemes::scale_fill_tableau()
+p2 = ggplot(data = all, aes(x = Group, y = live.births.prior.to.sle.diagnosis, fill = Group))+geom_boxplot()+theme_classic()+labs(x = '', y = 'Pregnancy prior SLE')+ggthemes::scale_fill_tableau()
+ggpubr::ggarrange(p1, p2, common.legend = T)
+```
+
+
+## Regularity of Menses Prior SLE
+
+```{r}
+ggplot(all, aes(x = regularity.of.menses.prior.to.sle.diagnosis, fill = Group, y = ..prop.., group = Group))+geom_bar(position = position_dodge(), stat = 'count')+theme_classic()+theme(axis.text.x = element_text(angle = 45))+labs(x = 'Regularity of Menses Prior SLE', y = 'Proportion')+ggthemes::scale_fill_tableau()
+```
+
+## Difficulty Conceiving Prior SLE
+
+```{r}
+ggplot(data = all, aes(x = difficulty.conceiving.a.child.prior.to.being.diagnosed.for.sle, y = ..prop.., fill = Group, group = Group))+geom_bar(position = position_dodge(), stat = 'count')+theme_classic()+labs(x = 'Difficulty Conceiving Prior SLE', y = 'Proportion')+ggthemes::scale_fill_tableau()
+```
+
+:::
+
+
+# Comparison Post Treatment
+
+::: {.panel-tabset}
+
+## Length of Menses
+
+```{r}
+ggplot(data = all, aes(x = Group, y = length.of.menses.per.month.after))+geom_boxplot()+theme_classic()+labs(x = '', y = 'Length of Menses Post Treatment')+ggthemes::scale_fill_tableau()
+```
+
+## Pregnancy 
+
+```{r}
+p1 = ggplot(data = all, aes(x = times.pregnant.after, fill = Group, y = ..prop..))+geom_bar(position = position_dodge())+theme_classic()+labs(y = 'Proportion', x = 'Pregnancy Post Treatment')+theme(legend.position = 'top')+ggthemes::scale_fill_tableau()
+p2 = ggplot(data = all, aes(x = Group, y = times.pregnant.after, fill = Group))+geom_boxplot()+theme_classic()+labs(x = '', y = 'Pregnancy Post Treatment')+ggthemes::scale_fill_tableau()
+ggpubr::ggarrange(p1, p2, common.legend = T)
+```
+
+
+## Live birth
+
+```{r}
+p1 = ggplot(data = all, aes(x = live.births.after, fill = Group, y = ..prop..))+geom_bar(position = position_dodge())+theme_classic()+labs(y = 'Proportion', x = 'Live Births Post Treatment')+theme(legend.position = 'top')+ggthemes::scale_fill_tableau()
+p2 = ggplot(data = all, aes(x = Group, y = live.births.after, fill = Group))+geom_boxplot()+theme_classic()+labs(x = '', y = 'Live Births Post Treatment')+ggthemes::scale_fill_tableau()
+ggpubr::ggarrange(p1, p2, common.legend = T)
+```
+
+## Miscarriages/Abortions
+
+```{r}
+p1 = ggplot(data = all, aes(x = miscarriages.and.or.abortions.after, fill = Group, y = ..prop..))+geom_bar(position = position_dodge())+theme_classic()+labs(y = 'Proportion', x = 'Miscarriage/Abortion Post Treatment')+theme(legend.position = 'top')+ggthemes::scale_fill_tableau()
+p2 = ggplot(data = all, aes(x = Group, y = miscarriages.and.or.abortions.after, fill = Group))+geom_boxplot()+theme_classic()+labs(x = '', y = 'Miscarriage/Abortion Post Treatment')+ggthemes::scale_fill_tableau()
+ggpubr::ggarrange(p1, p2, common.legend = T)
+```
+
+
+## Regularity of Menses
+
+```{r}
+
+ggplot(all, aes(x = regularity.of.menses.after, fill = Group, y = ..prop.., group = Group))+geom_bar(position = position_dodge(), stat = 'count')+theme_classic()+theme(axis.text.x = element_text(angle = 45))+labs(x = 'Regularity of Menses Post Treatment', y = 'Proportion')+ggthemes::scale_fill_tableau()
+```
+
+
+## Regularity of Menses (Poly+Oligo)
+
+```{r}
+all%>%dplyr::mutate(regularity.of.menses.after.polyoligo = dplyr::recode(regularity.of.menses.after, 'Oligomenorrhea' = "Irregular", 'Polymenorrhea' = 'Irregular'))%>%
+ggplot()+ aes(x = regularity.of.menses.after.polyoligo, fill = Group, y = ..prop.., group = Group)+geom_bar(position = position_dodge(), stat = 'count')+theme_classic()+theme(axis.text.x = element_text(angle = 45))+labs(x = 'Regularity of Menses Post Treatment', y = 'Proportion')+ggthemes::scale_fill_tableau()
+```
+
+
+## Difficulty conceiving 
+
+```{r}
+ggplot(all, aes(x = difficulty.conceiving.a.child.after, fill = Group, y = ..prop.., group = Group))+geom_bar(position = position_dodge(), stat = 'count')+theme_classic()+theme(axis.text.x = element_text(angle = 45))+labs(x = 'Difficulty Conceiving Post Treatment', y = 'Proportion')+ggthemes::scale_fill_tableau()
+```
+
+:::
+
+# Pre vs Post
+
+::: {.panel-tabset}
+
+## Length of Menses (Modern)
+
+Length of menses reported as an interval was converted to an average, for example, 5 to 6 days was converted to be 5.5 days. Quartiles of length of menses were calculated using responses from questions relating to length of menses prior SLE and post treatment. The quartiles were used to bin the length into four groups. The following figure shows transition of patients from one group to other. Width of the bands in the following figure represents frequency. 
+
+
+```{r}
+cuts = quantile(c(all$length.of.menses.per.month.after, all$length.of.menses.per.month.prior.to.sle.diagnosis), seq(0,1,0.25), na.rm = T)
+all%>%dplyr::mutate(Prior = cut(length.of.menses.per.month.prior.to.sle.diagnosis, cuts),
+                    Post = cut(length.of.menses.per.month.after, cuts))%>%
+  dplyr::mutate(Prior = factor(Prior, levels = rev(levels(Prior))),
+                Post = factor(Post, levels = rev(levels(Post))))%>%
+  dplyr::select(Group, Prior, Post)%>%
+  group_by(Group, Prior, Post)%>%
+  summarise(freq = n())%>%
+  mutate(Group = factor(Group, levels = c('Group1', 'Group2', 'Group3')))%>%
+  na.omit()%>%
+  mutate(Change = ifelse(as.integer(Post) - as.integer(Prior)>0, 'Decreased', ifelse(as.integer(Post) - as.integer(Prior)==0, 'Unchanged', 'Increased')))%>%
+  ggplot()+
+  aes(y = freq, axis1 = Prior, axis2 = Post)+
+  geom_alluvium(aes(fill = Change))+
+  geom_stratum(width = 1/5, fill = 'black', color = 'grey')+
+  geom_label(stat = 'stratum', aes(label = after_stat(stratum)), size = 2.5)+
+  facet_wrap(vars(Group), scales = 'free')+theme_classic()
+  
+```
+
+## Length of Menses (Classical)
+
+```{r}
+all%>%dplyr::mutate(Change.in.length.of.menses = ifelse(length.of.menses.per.month.prior.to.sle.diagnosis==length.of.menses.per.month.after, 'Unchanged', 'Changed'))%>%
+  tidyr::drop_na(Change.in.length.of.menses)%>%
+  ggplot()+
+  aes(x = Change.in.length.of.menses, group = Group, fill = Group, y = ..prop..)+
+  geom_bar(position = position_dodge())+
+  theme_classic()+
+  ggthemes::scale_fill_tableau()+
+  labs(x = 'Length of Mense', y = 'Proportion')
+                                                                                          
+```
+
+## Length of Menses (Boxplot)
+
+Here I showed how the distribution of menses prior SLE compared to that post SLE
+
+```{r warning=F}
+p1 = ggplot(data = all, aes(x = Group, y = length.of.menses.per.month.prior.to.sle.diagnosis, color = Group))+geom_boxplot()+ggthemes::scale_fill_tableau()+labs(x = '', y = 'Length of Menses', title = 'Prior SLE diagnosis')+theme_classic()
+p2 = ggplot(data = all, aes(x = Group, y = length.of.menses.per.month.after, color = Group))+geom_boxplot()+ggthemes::scale_fill_tableau()+labs(x = '', y = 'Length of Menses', title = 'Post Treatment')+theme_classic()
+ggpubr::ggarrange(p1,p2, common.legend = T)
+```
+
+
+## Length of Menses (Barchart)
+
+
+
+```{r}
+t_test = t.test(all%>%dplyr::filter(Group=='Group1')%>%pull(length.of.menses.per.month.prior.to.sle.diagnosis),
+       all%>%dplyr::filter(Group=='Group1')%>%pull(length.of.menses.per.month.after),
+       paired = T)
+t_test
+```
+
+<span style='color:blue'>Test if there is significant difference between menses length prior and post treatment on Group 1: p-value = `r t_test$p.value`</span>
+
+
+```{r}
+t_test = t.test(all%>%dplyr::filter(Group=='Group2')%>%pull(length.of.menses.per.month.prior.to.sle.diagnosis),
+       all%>%dplyr::filter(Group=='Group2')%>%pull(length.of.menses.per.month.after),
+       paired = T)
+t_test
+```
+
+<span style='color:blue'>Test if there is significant difference between menses length prior and post treatment on Group 2: p-value = `r t_test$p.value`</span>
+
+
+
+<span style='color:blue'>Comparing three groups on the length of menses post treatment after controlling for individual's prior menses length is the most appropriate analysis which can be performed using ANCOVA.</span>
+
+```{r}
+car::Anova(aov(length.of.menses.per.month.after ~ Group + length.of.menses.per.month.prior.to.sle.diagnosis, data = all), type = 'III')
+```
+
+<span style='color:blue'>p-value for group is 0.09365</span>
+
+```{r}
+plot_data = all%>%dplyr::select(Group, patient, length.of.menses.per.month.prior.to.sle.diagnosis, length.of.menses.per.month.after)%>%
+  dplyr::rename(Prior = length.of.menses.per.month.prior.to.sle.diagnosis, Post = length.of.menses.per.month.after)%>%
+  tidyr::pivot_longer(cols = c(Prior, Post))%>%
+  dplyr::mutate(name = factor(name, levels = c('Prior', 'Post')))%>%
+  dplyr::group_by(Group, name)%>%
+  dplyr::summarise(Mean = mean(value, na.rm = T), SD = sd(value, na.rm = T))
+p = ggplot(data = plot_data, aes(x = Group, y = Mean, fill = name))+geom_bar(position = position_dodge(), stat = 'identity', linewidth = 1.5, color = 'black')+geom_errorbar(aes(ymin = Mean-SD, ymax = Mean+SD), width = 0.2, position = position_dodge(0.9), color = 'blue', linewidth = 1.5)+geom_text(aes(label = paste0(round(Mean,2), '(', round(SD,2), ')'), y = Mean + SD), position = position_dodge(0.9), vjust = -1)+theme_classic()+ggthemes::scale_color_tableau()+labs(x = '', y = 'Length of Menses')
+p
+```
+
+## Length of Menses (Test)
+
+
+
+```{r}
+f_test = all%>%dplyr::mutate(Change.in.length.of.menses = ifelse(length.of.menses.per.month.prior.to.sle.diagnosis==length.of.menses.per.month.after, 'Unchanged', 'Changed'))%>%
+  tidyr::drop_na(Change.in.length.of.menses)%>%
+  dplyr::select(Group, Change.in.length.of.menses)%>%table()%>%fisher.test()
+```
+
+Fisher's exact test is used to see if the proportion of change in length of menses are independent to study groups. The p-value was `r round(f_test$p.value,3)` and so we have non-conclusive result. 
+
+```{r}
+f_test
+```
+
+```{r}
+f_test = all%>%dplyr::filter(Group!='Group3')%>%dplyr::mutate(Change.in.length.of.menses = ifelse(length.of.menses.per.month.prior.to.sle.diagnosis==length.of.menses.per.month.after, 'Unchanged', 'Changed'))%>%
+  tidyr::drop_na(Change.in.length.of.menses)%>%
+  dplyr::select(Group, Change.in.length.of.menses)%>%table()%>%fisher.test()
+```
+
+I also tried comparing group1 with group2 and the p-value for this comparison was `r round(f_test$p.value,3)`. 
+
+```{r}
+f_test
+```
+
+I tried fitting an ANCOVA model with length of menses per month after treatment as response variable and study group as predictor after controlling for the length of menses prior to SLE diagnosis. The model estimates did not provide indication of association between group and length of menses after treatment when we account the effect of length of menses before SLE diagnosis. This result is similar to the model where I controled for age of medication. 
+
+```{r}
+car::Anova(aov(length.of.menses.per.month.after ~ Group + length.of.menses.per.month.prior.to.sle.diagnosis, data = all), type = 'III')
+```
+
+
+```{r}
+all%>%dplyr::mutate(Change.in.length.of.menses = ifelse(length.of.menses.per.month.prior.to.sle.diagnosis==length.of.menses.per.month.after, 'Unchanged', 'Changed'))%>%
+  tidyr::drop_na(Change.in.length.of.menses)%>%
+  dplyr::select(Group, Change.in.length.of.menses)%>%
+  dplyr::filter(Group!='Group3')%>%
+  table()%>%fisher.test()
+```
+
+## Regularity (Modern)
+
+If a patient had irregular menses and became regular after treatment, it is coded as "Improvement", regular to irregular is coded as "Deteriorated". 
+
+
+```{r}
+all%>%dplyr::mutate(Prior = ifelse(regularity.of.menses.prior.to.sle.diagnosis=='Regular', 'Regular', 'Irregular'),
+                    Post = ifelse(regularity.of.menses.after=='Regular', 'Regular', 'Irregular'))%>%
+  dplyr::select(Group, Prior, Post)%>%
+  dplyr::group_by(Group, Prior, Post)%>%
+  summarise(freq = n())%>%
+  mutate(Group = factor(Group))%>%
+  dplyr::mutate(Improvement = ifelse(Prior=='Irregular' & Post=='Regular', 'Improved', ifelse(Prior == 'Irregular' & Post == 'Irregular', 'Unchanged', 'Deterioated')))%>%
+  na.omit()%>%
+  ggplot()+
+  aes(y = freq, axis1 = Prior, axis2 = Post)+
+  geom_alluvium(aes(fill = Improvement))+
+  geom_stratum(width = 1/5, fill = 'black', color = 'grey')+
+  geom_label(stat = 'stratum', aes(label = after_stat(stratum)), size = 2.5)+
+  facet_wrap(vars(Group), scales = 'free')+theme_classic()
+```
+
+## Regularity (Classical)
+
+If a patient had irregular menses and became regular after treatment, it is coded as "Improvement", regular to irregular is coded as "Deteriorated". The unchanged category contains patients with regular and irregular menses but who did not change state of regularity after treatment. 
+
+```{r}
+all%>%dplyr::mutate(Prior = ifelse(regularity.of.menses.prior.to.sle.diagnosis=='Regular', 'Regular', 'Irregular'),
+                    Post = ifelse(regularity.of.menses.after=='Regular', 'Regular', 'Irregular'))%>%
+  dplyr::select(Group, Prior, Post)%>%
+  dplyr::mutate(Improvement = case_when(Prior=='Irregular' & Post=='Regular' ~ 'Improved',
+                                        Prior =='Irregular' & Post == 'Irregular' ~ 'Unchanged',
+                                        Prior =='Regular' & Post =='Regular' ~ 'Unchanged',
+                                        Prior =='Regular' & Post =='Irregular' ~ 'Deterioated'))%>%
+  na.omit()%>%
+  ggplot()+
+  aes(x = Improvement, group = Group, fill = Group)+geom_bar(position = position_dodge())+
+  geom_text(stat = 'count', aes(label=..count..), vjust = 1, position = position_dodge(width = 0.9))+
+  theme_classic()+
+  ggthemes::scale_fill_tableau()
+
+```
+
+
+## Regularity (Table)
+
+```{r, message=F, warning=F}
+all%>%dplyr::select(patient, Group, regularity.of.menses.after, regularity.of.menses.prior.to.sle.diagnosis)%>%
+  na.omit()%>%
+  dplyr::mutate(RegularityPrior = ifelse(regularity.of.menses.prior.to.sle.diagnosis=='Regular', 'Regular', 'Irregular'),
+                    RegularityPost = ifelse(regularity.of.menses.after=='Regular', 'Regular', 'Irregular'))%>%
+  dplyr::mutate(RegularityChange = paste(RegularityPrior, ' - ', RegularityPost))%>%
+  dplyr::group_by(Group, RegularityChange)%>%
+  dplyr::summarise(Freq = n())%>%
+  tidyr::pivot_wider(names_from = Group, values_from = Freq)%>%
+  tidyr::separate(RegularityChange, c('Prior SLE', 'Post Treatment'))%>%
+  kable()%>%
+  kable_styling(bootstrap_options = c('hover', 'striped'))
+```
+
+## Regularity (Test)
+
+Using Fisher's exact test, 
+
+```{r}
+test_dat = all%>%dplyr::mutate(Prior = ifelse(regularity.of.menses.prior.to.sle.diagnosis=='Regular', 'Regular', 'Irregular'),
+                    Post = ifelse(regularity.of.menses.after=='Regular', 'Regular', 'Irregular'))%>%
+  dplyr::select(Group, Prior, Post)%>%
+  dplyr::mutate(Improvement = case_when(Prior=='Irregular' & Post=='Regular' ~ 'Improved',
+                                        Prior =='Irregular' & Post == 'Irregular' ~ 'Unchanged',
+                                        Prior =='Regular' & Post =='Regular' ~ 'Unchanged',
+                                        Prior =='Regular' & Post =='Irregular' ~ 'Deterioated'))%>%
+  na.omit()%>%
+  dplyr::filter(Improvement!='Improved' & Group!='Group3')
+f_test = fisher.test(table(test_dat$Improvement, test_dat$Group))
+print(f_test)
+```
+Being in group 1 i.e. having treated by CYC only increases the odds of deteriorating regularity of menses (regular to irregular after treatment) by about 6 times (p-value = `r round(f_test$p.value,3)`).  I did not see significance in the difference between control and Group 1. 
+
+
+```{r}
+test_dat = all%>%dplyr::mutate(Prior = ifelse(regularity.of.menses.prior.to.sle.diagnosis=='Regular', 'Regular', 'Irregular'),
+                    Post = ifelse(regularity.of.menses.after=='Regular', 'Regular', 'Irregular'))%>%
+  dplyr::select(Group, Prior, Post)%>%
+  dplyr::mutate(Improvement = case_when(Prior=='Irregular' & Post=='Regular' ~ 'Improved',
+                                        Prior =='Irregular' & Post == 'Irregular' ~ 'Unchanged',
+                                        Prior =='Regular' & Post =='Regular' ~ 'Unchanged',
+                                        Prior =='Regular' & Post =='Irregular' ~ 'Deterioated'))%>%
+  na.omit()%>%
+  dplyr::filter(Improvement!='Improved' & Group!='Group2')
+
+fisher.test(table(test_dat$Improvement, test_dat$Group))
+```
+
+
+Comparison on all groups
+
+```{r}
+test_dat = all%>%dplyr::mutate(Prior = ifelse(regularity.of.menses.prior.to.sle.diagnosis=='Regular', 'Regular', 'Irregular'),
+                    Post = ifelse(regularity.of.menses.after=='Regular', 'Regular', 'Irregular'))%>%
+  dplyr::select(Group, Prior, Post)%>%
+  dplyr::mutate(Improvement = case_when(Prior=='Irregular' & Post=='Regular' ~ 'Improved',
+                                        Prior =='Irregular' & Post == 'Irregular' ~ 'Unchanged',
+                                        Prior =='Regular' & Post =='Regular' ~ 'Unchanged',
+                                        Prior =='Regular' & Post =='Irregular' ~ 'Deterioated'))%>%
+  na.omit()%>%
+  dplyr::filter(Improvement!='Improved')
+
+fisher.test(table(test_dat$Improvement, test_dat$Group), alternative = 'greater')
+```
+
+:::
+
+
+# Demographics 
+
+```{r}
+demo = readxl::read_excel('./data/GnRh dataset_jun6.xlsx')%>%
+  dplyr::filter(!(CYC_ID=='CYC046' & Birth_Year == 1992))%>%
+  dplyr::select(CYC_ID, Age_medication, selenasledai_1, sliccacr_1)%>%
+  dplyr::distinct()%>%
+  dplyr::rename(patient='CYC_ID')
+all = all%>%left_join(demo, by = 'patient')
+
+ethnicity = readxl::read_excel('./data/data_updated_ethnicity.xlsx')%>%
+  dplyr::select(patient, Ethnicity)%>%
+  dplyr::distinct()
+all = all%>%left_join(ethnicity, by = 'patient')
+```
+
+::: {.panel-tabset}
+
+## Ethnicity
+
+```{r}
+table(all$Group, all$Ethnicity, useNA = 'ifany')%>%
+  kbl()%>%kable_styling(bootstrap_options = c('hover', 'stripped'))
+```
+
+
+
+
+```{r}
+p_ethnicity = ggplot(data = all, aes(x = Ethnicity, group = Group, fill = Group))+geom_bar()+theme_classic()+ggthemes::scale_fill_tableau()
+p_ethnicity
+```
+
+Though Fisher's exact test was inconclusive whether the patients were grouped independent of ethnicity, we see that Group2 had more hispanic than Group1. Also, Group3 had many missing values. It would be great to have more complete data on ethnicity. 
+
+## Medication Age
+
+Mean and standard deviation of age at medication in study groups are as follows:
+
+```{r}
+all%>%group_by(Group)%>%
+  summarise(Mean = mean(Age_medication, na.rm = T), SD = sd(Age_medication, na.rm = T))%>%
+  mutate(MeanSD = paste0(round(Mean,2), '( ', round(SD,2), ')'))%>%
+  kbl()%>%
+  kable_styling(bootstrap_options = c('hover', 'stripped'))
+```
+
+
+t-test to compare the groupwise means:
+
+```{r}
+ggpubr::compare_means(Age_medication ~ Group, data = all, method = 't.test')%>%
+  kbl()%>%kable_styling(bootstrap_options = c('hover','stripped'))
+```
+
+
+```{r}
+my_comp = ggpubr::compare_means(Age_medication ~ Group, data = all)
+my_comp = list(c('Group1', 'Group2'), c('Group2', 'Group3'), c('Group1', 'Group3'))
+p_med_age = ggplot(data = all, aes(x = Group, y = Age_medication, color = Group))+
+  geom_boxplot()+
+  ggpubr::stat_compare_means(comparisons = my_comp, method = 't.test')+
+  ggpubr::stat_compare_means(label.y = 50, method = 'aov')+
+  theme_classic()+
+  ggthemes::scale_color_tableau()+
+  labs(x = '', y = 'Medication Start Age')
+p_med_age
+```
+
+## Age (Current)
+
+```{r}
+age_data = readxl::read_excel('./data/Age_Current_Single_Sheet.xlsx')%>%
+  dplyr::mutate(CYC_ID = toupper(CYC_ID))%>%
+  dplyr::rename(patient = CYC_ID)
+all = all%>%left_join(age_data, by = 'patient')
+```
+
+Mean and standard deviation of current age in study groups are as follows:
+
+```{r}
+all%>%group_by(Group)%>%
+  summarise(Mean = mean(CurrentAge, na.rm = T), SD = sd(CurrentAge, na.rm = T))%>%
+  mutate(MeanSD = paste0(round(Mean,2), '( ', round(SD,2), ')'))%>%
+  kbl()%>%
+  kable_styling(bootstrap_options = c('hover', 'stripped'))
+```
+
+
+t-test to compare the groupwise means:
+
+```{r}
+ggpubr::compare_means(CurrentAge ~ Group, data = all, method = 't.test')%>%
+  kbl()%>%kable_styling(bootstrap_options = c('hover','stripped'))
+```
+
+
+```{r}
+my_comp = ggpubr::compare_means(CurrentAge ~ Group, data = all)
+my_comp = list(c('Group1', 'Group2'), c('Group2', 'Group3'), c('Group1', 'Group3'))
+p_currentage<-ggplot(data = all, aes(x = Group, y = CurrentAge, color = Group))+
+  geom_boxplot()+
+  ggpubr::stat_compare_means(comparisons = my_comp, method = 't.test')+
+  ggpubr::stat_compare_means(label.y = 70, method = 'aov')+
+  theme_classic()+
+  ggthemes::scale_color_tableau()+
+  labs(x = '', y = 'Current Age')
+p_currentage
+```
+
+
+
+## Cumulative CYC Dose
+
+```{r}
+main = readxl::read_excel('./data/GnRh dataset_jun6.xlsx')%>%
+  dplyr::mutate(Dur_Followup = difftime(VISIT_DATE2, Baseline_Date, units = 'weeks'))%>%
+  dplyr::select(CYC_ID, dateofDX, dz_duration, Baseline_Date, Cumulative_CYC_dose, Birth_Year, Dur_Followup)%>%
+  rename(patient = CYC_ID, SLE_Duration = dz_duration)%>%
+  filter(!(patient=='CYC046' & Birth_Year == 1992))
+all = all%>%left_join(main, by = 'patient')
+```
+
+
+Mean and standard deviation of cumulative CYC dose in study groups are as follows:
+
+```{r}
+all%>%filter(Group!='Group3')%>%
+  group_by(Group)%>%
+  summarise(Mean = mean(Cumulative_CYC_dose, na.rm = T), SD = sd(Cumulative_CYC_dose, na.rm = T))%>%
+  mutate(MeanSD = paste0(round(Mean,2), '( ', round(SD,2), ')'))%>%
+  kbl()%>%
+  kable_styling(bootstrap_options = c('hover', 'stripped'))
+```
+
+
+
+```{r}
+
+my_comp = list(c('Group1', 'Group2'))
+p_cum_cyc_dose = ggplot(data = all%>%filter(Group!='Group3'), aes(x = Group, y = Cumulative_CYC_dose, color = Group))+
+  geom_boxplot()+
+  ggpubr::stat_compare_means(method = 'aov')+
+  theme_classic()+
+  ggthemes::scale_color_tableau()+
+  labs(x = '', y = 'Cumulative CYC Dose')
+p_cum_cyc_dose
+```
+
+
+
+
+## Age of Onset
+
+```{r}
+all = all%>%dplyr::mutate(AgeOnset = dateofDX - Birth_Year)
+```
+
+
+Mean and standard deviation of age of onset in study groups are as follows:
+
+```{r}
+all%>%group_by(Group)%>%
+  summarise(Mean = mean(AgeOnset, na.rm = T), SD = sd(AgeOnset, na.rm = T))%>%
+  mutate(MeanSD = paste0(round(Mean,2), '( ', round(SD,2), ')'))%>%
+  kbl()%>%
+  kable_styling(bootstrap_options = c('hover', 'stripped'))
+```
+
+
+t-test to compare the groupwise means:
+
+```{r}
+ggpubr::compare_means(AgeOnset ~ Group, data = all, method = 't.test')%>%
+  kbl()%>%kable_styling(bootstrap_options = c('hover','stripped'))
+```
+
+
+```{r}
+my_comp = ggpubr::compare_means(AgeOnset ~ Group, data = all)
+my_comp = list(c('Group1', 'Group2'), c('Group2', 'Group3'), c('Group1', 'Group3'))
+p_ageonset<-ggplot(data = all, aes(x = Group, y = AgeOnset, color = Group))+
+  geom_boxplot()+
+  ggpubr::stat_compare_means(comparisons = my_comp, method = 't.test')+
+  ggpubr::stat_compare_means(label.y = 65, method = 'aov')+
+  theme_classic()+
+  ggthemes::scale_color_tableau()+
+  labs(x = '', y = 'Age of Onset')
+p_ageonset
+```
+
+
+
+## Duration of SLE
+
+
+Mean and standard deviation of duration of SLE in study groups are as follows:
+
+```{r}
+all%>%group_by(Group)%>%
+  summarise(Mean = mean(SLE_Duration, na.rm = T), SD = sd(SLE_Duration, na.rm = T))%>%
+  mutate(MeanSD = paste0(round(Mean,2), '( ', round(SD,2), ')'))%>%
+  kbl()%>%
+  kable_styling(bootstrap_options = c('hover', 'stripped'))
+```
+
+
+t-test to compare the groupwise means:
+
+```{r}
+ggpubr::compare_means(SLE_Duration ~ Group, data = all, method = 't.test')%>%
+  kbl()%>%kable_styling(bootstrap_options = c('hover','stripped'))
+```
+
+
+```{r}
+my_comp = ggpubr::compare_means(SLE_Duration ~ Group, data = all)
+my_comp = list(c('Group1', 'Group2'), c('Group2', 'Group3'), c('Group1', 'Group3'))
+p_sle_duration <- ggplot(data = all, aes(x = Group, y = SLE_Duration, color = Group))+
+  geom_boxplot()+
+  ggpubr::stat_compare_means(comparisons = my_comp, method = 't.test')+
+  ggpubr::stat_compare_means(label.y = 32, method = 'aov')+
+  theme_classic()+
+  ggthemes::scale_color_tableau()+
+  labs(x = '', y = 'Duration of SLE')
+p_sle_duration
+```
+
+
+## SELENA-SLEDAI
+
+Mean and standard deviation of SELENA-SLEDAI in study groups are as follows:
+
+```{r}
+all%>%group_by(Group)%>%
+  summarise(Mean = mean(selenasledai_1, na.rm = T), SD = sd(selenasledai_1, na.rm = T))%>%
+  mutate(MeanSD = paste0(round(Mean,2), '( ', round(SD,2), ')'))%>%
+  kbl()%>%
+  kable_styling(bootstrap_options = c('hover', 'stripped'))
+```
+
+
+t-test to compare the groupwise means:
+
+```{r}
+ggpubr::compare_means(selenasledai_1 ~ Group, data = all, method = 't.test')%>%
+  kbl()%>%kable_styling(bootstrap_options = c('hover','stripped'))
+```
+
+
+```{r}
+my_comp = ggpubr::compare_means(selenasledai_1 ~ Group, data = all)
+my_comp = list(c('Group1', 'Group2'), c('Group2', 'Group3'), c('Group1', 'Group3'))
+p_selenasledai_1 <- ggplot(data = all, aes(x = Group, y = selenasledai_1, color = Group))+
+  geom_boxplot()+
+  ggpubr::stat_compare_means(comparisons = my_comp, method = 't.test')+
+  ggpubr::stat_compare_means(label.y = 40, method = 'aov')+
+  theme_classic()+
+  ggthemes::scale_color_tableau()+
+  labs(x = '', y = 'SELENA-SLEDAI')
+p_selenasledai_1
+```
+
+
+## SLICC/ACRDI
+
+Mean and standard deviation of SELENA-SLEDAI in study groups are as follows:
+
+```{r}
+all%>%group_by(Group)%>%
+  summarise(Mean = mean(sliccacr_1, na.rm = T), SD = sd(sliccacr_1, na.rm = T))%>%
+  mutate(MeanSD = paste0(round(Mean,2), '( ', round(SD,2), ')'))%>%
+  kbl()%>%
+  kable_styling(bootstrap_options = c('hover', 'stripped'))
+```
+
+
+t-test to compare the groupwise means:
+
+```{r}
+ggpubr::compare_means(sliccacr_1 ~ Group, data = all, method = 't.test')%>%
+  kbl()%>%kable_styling(bootstrap_options = c('hover','stripped'))
+```
+
+
+```{r}
+my_comp = ggpubr::compare_means(sliccacr_1 ~ Group, data = all)
+my_comp = list(c('Group1', 'Group2'), c('Group2', 'Group3'), c('Group1', 'Group3'))
+p_sliccacr_1 <- ggplot(data = all, aes(x = Group, y = sliccacr_1, color = Group))+
+  geom_boxplot()+
+  ggpubr::stat_compare_means(comparisons = my_comp, method = 't.test')+
+  ggpubr::stat_compare_means(label.y = 15, method = 'aov')+
+  theme_classic()+
+  ggthemes::scale_color_tableau()+
+  labs(x = '', y = 'SLICC/ACRDI')
+p_sliccacr_1
+```
+
+
+## Duration of Follow Up
+
+Mean and standard deviation of SELENA-SLEDAI in study groups are as follows:
+
+```{r}
+all%>%group_by(Group)%>%
+  summarise(Mean = mean(Dur_Followup, na.rm = T), SD = sd(Dur_Followup, na.rm = T))%>%
+  mutate(MeanSD = paste0(round(Mean,2), '( ', round(SD,2), ')'))%>%
+  kbl()%>%
+  kable_styling(bootstrap_options = c('hover', 'stripped'))
+```
+
+
+t-test to compare the groupwise means:
+
+```{r}
+ggpubr::compare_means(Dur_Followup ~ Group, data = all, method = 't.test')%>%
+  kbl()%>%kable_styling(bootstrap_options = c('hover','stripped'))
+```
+
+
+```{r}
+
+my_comp = list(c('Group1', 'Group2'), c('Group2', 'Group3'), c('Group1', 'Group3'))
+p_Dur_Followup <- ggplot(data = all, aes(x = Group, y = Dur_Followup, color = Group))+
+  geom_boxplot()+
+  ggpubr::stat_compare_means(comparisons = my_comp, method = 't.test')+
+  ggpubr::stat_compare_means(label.y = 1600, method = 'aov')+
+  theme_classic()+
+  ggthemes::scale_color_tableau()+
+  labs(x = '', y = 'SLICC/ACRDI')
+p_Dur_Followup
+```
+
+## Combined Table
+
+<span style='color:blue'>Follow up duration measured in weeks</span>
+
+```{r}
+all%>%dplyr::select(AgeOnset, SLE_Duration, Cumulative_CYC_dose, CurrentAge, Group, Age_medication, selenasledai_1, sliccacr_1, Dur_Followup)%>%
+  tbl_summary(., by = 'Group',  
+              statistic = all_continuous() ~ "{mean} ({sd})",
+              type = list('sliccacr_1' ~ 'continuous'),
+              missing = 'no', 
+              digits = everything() ~ c(2,2), 
+              label = list("AgeOnset" ~ "Age of onset",
+                           "SLE_Duration" ~ "Duration of SLE",
+                           "Cumulative_CYC_dose" ~ "Cumulative CYC dose",
+                           "CurrentAge" ~ "Current Age",
+                           "Age_medication" ~ "Age when medication started",
+                           "selenasledai_1" ~ "SELENA-SLEDAI",
+                           "sliccacr_1" ~ "SLICC/ACRDI",
+                           "Dur_Followup" ~ "Follow up duration"))
+```
+
+## Combined Table (with p-value)
+
+```{r}
+all%>%mutate(Dur_Followup_n = as.numeric(Dur_Followup))%>%
+  mutate(AgeOnset = ff_label(AgeOnset, 'Age of onset'),
+         SLE_Duration = ff_label(SLE_Duration, 'Duration of SLE'),
+         Cumulative_CYC_dose = ff_label(Cumulative_CYC_dose, 'Cumulative Dose of CYC'),
+         CurrentAge = ff_label(CurrentAge, 'Current Age'),
+         Age_medication = ff_label(Age_medication, 'Age of medication'),
+         selenasledai_1 = ff_label(selenasledai_1, 'SELENA-SLEDAI'),
+         sliccacr_1 = ff_label(sliccacr_1, 'SLICC/ACRDI'),
+         Dur_Followup_n = ff_label(Dur_Followup_n, 'Follow up duration'))%>%
+  summary_factorlist('Group', c('AgeOnset', 'SLE_Duration', 'Cumulative_CYC_dose', 'CurrentAge', 'Age_medication', 'selenasledai_1', 'sliccacr_1', 'Dur_Followup_n'), p = T)%>%
+  select(!levels)%>%
+  kbl()%>%
+  kable_styling(bootstrap_options = c('hober', 'striped'))
+```
+
+## Combined Figure
+
+```{r}
+ggpubr::ggarrange(p_ethnicity, p_med_age, p_currentage, p_ageonset, p_cum_cyc_dose, p_sle_duration, p_selenasledai_1, p_sliccacr_1, common.legend = T)
+```
+
+:::
+
+
+
+
+# POI
+
+```{r}
+all = all%>%dplyr::mutate(POI = case_when(
+  age.diagnosed.with.menopause>=40 ~ 'No',
+  (age.diagnosed.with.menopause<40 & diagnosed.with.menopause.after =='Yes') ~ 'Yes',
+  (Group=='Group3' & age.diagnosed.with.menopause < 40) ~ 'Yes',
+  (Group=='Group3' & age.diagnosed.with.menopause >=40) ~ 'No',
+  (CurrentAge >= 40 & diagnosed.with.menopause.after == 'No') ~ 'No',
+  (Group == 'Group3' & is.na(age.diagnosed.with.menopause) & CurrentAge>40) ~'No'
+))
+
+all$POI[all$patient=='CYC008']<-NA
+```
+
+::: {.panel-tabset}
+
+## Group 1
+
+```{r}
+all%>%dplyr::filter(Group=='Group1')%>%
+  dplyr::select(patient, diagnosed.with.menopause.after, age.diagnosed.with.menopause, Age_medication, CurrentAge, POI)%>%
+  dplyr::arrange(diagnosed.with.menopause.after, age.diagnosed.with.menopause)%>%
+  kable(col.names = c('CYC_ID', 'Menopause', 'Age of Menopause', 'Age of Medication', 'Current Age', 'POI'))%>%
+  kable_styling(bootstrap_options = c('hover', 'stripped'))
+```
+
+
+## Group 2
+
+```{r}
+all%>%dplyr::filter(Group=='Group2')%>%
+  dplyr::select(patient, diagnosed.with.menopause.after, age.diagnosed.with.menopause, Age_medication, CurrentAge, POI)%>%
+  dplyr::arrange(diagnosed.with.menopause.after, age.diagnosed.with.menopause)%>%
+  kable(col.names = c('CYC_ID', 'Menopause', 'Age of Menopause', 'Age of Medication', 'Current Age', 'POI'))%>%
+  kable_styling(bootstrap_options = c('hover', 'stripped'))
+```
+
+## Group 3
+
+```{r}
+all%>%dplyr::filter(Group=='Group3')%>%
+  dplyr::select(patient, diagnosed.with.menopause.after, age.diagnosed.with.menopause, Age_medication, CurrentAge, POI)%>%
+  dplyr::arrange(diagnosed.with.menopause.after, age.diagnosed.with.menopause)%>%
+  kable(col.names = c('CYC_ID', 'Menopause', 'Age of Menopause', 'Age of Medication', 'Current Age', 'POI'))%>%
+  kable_styling(bootstrap_options = c('hover', 'stripped'))
+```
+
+
+## Test
+
+```{r}
+all%>%dplyr::select(Group, POI)%>%table()%>%kbl()%>%kable_styling(bootstrap_options = c('striped'))
+```
+
+
+
+
+```{r}
+f_test = all%>%dplyr::select(Group, POI)%>%table()%>%fisher.test()
+```
+
+Fisher's exact test comparing all three groups have p-value of `r round(f_test$p.value,3)` and so we lack power here. 
+
+```{r}
+print(f_test)
+```
+
+
+
+```{r}
+f_test = all%>%dplyr::filter(Group!='Group3')%>%dplyr::select(Group, POI)%>%table()%>%fisher.test()
+```
+
+Fisher's exact test to compare Group1 with Group2 also gave high p-value of `r round(f_test$p.value,3)`. 
+
+:::
+
+
+
+
+```{r include=F, eval=F}
+p = all%>%dplyr::select(patient, Group, length.of.menses.per.month.prior.to.sle.diagnosis, length.of.menses.per.month.after)%>%
+  dplyr::rename(Prior = length.of.menses.per.month.prior.to.sle.diagnosis, Post = length.of.menses.per.month.after)%>%
+  tidyr::pivot_longer(cols = c(Prior, Post))%>%
+  dplyr::mutate(name = factor(name, levels = c('Prior', 'Post')))%>%
+  ggplot()+
+  aes(x = Group, y = value, fill = name)+
+  geom_boxplot()+
+  theme_classic()+
+  ggthemes::scale_fill_tableau()+
+  labs(x = '', y = 'Length of Menses', fill = 'Time')+
+  scale_fill_discrete(labels = c(Post = 'Post treatment', Prior = 'Prior SLE'))
+ggsave('./figures/length_of_menses_try3.pdf', p)
+
+plot_data = all%>%dplyr::select(Group, patient, length.of.menses.per.month.prior.to.sle.diagnosis, length.of.menses.per.month.after)%>%
+  dplyr::rename(Prior = length.of.menses.per.month.prior.to.sle.diagnosis, Post = length.of.menses.per.month.after)%>%
+  tidyr::pivot_longer(cols = c(Prior, Post))%>%
+  dplyr::mutate(name = factor(name, levels = c('Prior', 'Post')))%>%
+  dplyr::group_by(Group, name)%>%
+  dplyr::summarise(Mean = mean(value, na.rm = T), SD = sd(value, na.rm = T))
+
+
+p = ggplot(data = plot_data, aes(x = Group, y = Mean, fill = name))+geom_bar(position = position_dodge(), stat = 'identity', linewidth = 1.5, color = 'black')+geom_errorbar(aes(ymin = Mean-SD, ymax = Mean+SD), width = 0.2, position = position_dodge(0.9), color = 'blue', linewidth = 1.5)+geom_text(aes(label = paste0(round(Mean,2), '(', round(SD,2), ')'), y = Mean + SD), position = position_dodge(0.9), vjust = -1)+theme_classic()+ggthemes::scale_color_tableau()+labs(x = '', y = 'Length of Menses')
+
+ggsave('./figures/length_of_menses_try3.pdf', p)
+
+p = ggplot(data = plot_data, aes(x = Group, y = Mean, fill = name))+
+  geom_bar(position = position_dodge(), stat = 'identity', linewidth = 1.5, color = 'black')+
+  geom_errorbar(aes(ymin = Mean-SD, ymax = Mean+SD), width = 0.2, position = position_dodge(0.9), color = 'darkgreen', linewidth = 1.5)+
+  geom_text(aes(label = paste0(round(Mean,2), '(', round(SD,2), ')'), y = Mean + SD), position = position_dodge(0.9), vjust = -1)+
+  theme_classic()+
+  scale_fill_discrete(labels = c(Prior = 'Prior to SLE Diagnosis', Post = 'Post Treatment'))+
+  labs(x = '', y = 'Length of Menses', fill = '')+
+  theme(legend.position = 'top')
+
+ggsave('./figures/length_of_menses_try4.pdf', p, width = 6, height = 6, scale = 1.2)
+ggsave('./figures/length_of_menses_try4.jpeg', p, width = 6, height = 6, scale = 1.2)
+
+p = ggplot(data = plot_data, aes(x = Group, y = Mean, fill = name))+
+  geom_bar(position = position_dodge(), stat = 'identity', linewidth = 1.5, color = 'black')+
+  geom_errorbar(aes(ymin = Mean-SD, ymax = Mean+SD), width = 0.2, position = position_dodge(0.9), color = 'darkgreen', linewidth = 1.5)+
+  geom_text(aes(label = paste0(round(Mean,2), '(', round(SD,2), ')'), y = Mean + SD), position = position_dodge(0.9), vjust = -1)+
+  theme_classic()+
+  ggthemes::scale_fill_tableau(labels = c(Prior = 'Prior to SLE Diagnosis', Post = 'Post Treatment'))+
+  labs(x = '', y = 'Length of Menses', fill = '')+
+  theme(legend.position = 'top')
+
+ggsave('./figures/length_of_menses_try5.pdf', p, width = 6, height = 6, scale = 1.2)
+ggsave('./figures/length_of_menses_try5.jpeg', p, width = 6, height = 6, scale = 1.2)
+```
